@@ -22,21 +22,31 @@ import type { JsonRpcMessage } from "./jsonrpc.js";
 export type Direction = "client-to-server" | "server-to-client";
 
 /**
- * An interceptor decides what to do with a message in flight. It can:
- *  - return `{ forward: msg }` (possibly modified) to send `msg` to the peer,
- *  - return `{ forward: null }` to drop the message silently (rare; mainly
- *    used when we are short-circuiting a request and have already sent the
- *    synthetic response upstream),
- *  - return `{ forward: null, respondToClient: errorMsg }` to short-circuit a
- *    client-to-server request: send `errorMsg` back to the client and do not
- *    forward to the downstream server. Only valid for `client-to-server`
- *    requests with a JSON-RPC id.
- *
- * Phase 1 always returns `{ forward: msg }` unchanged.
+ * A resolved decision: forward / drop, optionally also send a synthetic
+ * response straight back to the client. Used both for immediate decisions
+ * and as the resolution shape of a `pending` async hold.
  */
-export type InterceptorDecision = {
+export interface InterceptorResolution {
   forward: JsonRpcMessage | null;
   respondToClient?: JsonRpcMessage;
+}
+
+/**
+ * An interceptor decides what to do with a message in flight. It can:
+ *  - return `{ forward: msg }` (possibly modified) to send `msg` to the peer,
+ *  - return `{ forward: null }` to drop the message silently,
+ *  - return `{ forward: null, respondToClient: errorMsg }` to short-circuit a
+ *    client-to-server request: send `errorMsg` back to the client and do not
+ *    forward to the downstream server,
+ *  - return `{ forward: null, pending: Promise<InterceptorResolution> }` to
+ *    *hold* the call asynchronously. The proxy applies the immediate decision
+ *    right now (so subsequent messages keep flowing) and writes the resolved
+ *    forward/respondToClient once the pending promise settles. Phase 5 uses
+ *    this for human approval of `ask` verdicts so concurrent calls don't
+ *    deadlock the relay.
+ */
+export type InterceptorDecision = InterceptorResolution & {
+  pending?: Promise<InterceptorResolution>;
 };
 
 export interface InterceptorContext {

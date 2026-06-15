@@ -47,7 +47,8 @@ This is being built in seven phases. See [`BUILD_LOG.md`](BUILD_LOG.md) for whic
 - [x] **Phase 2** — Tamper-evident audit log
 - [x] **Phase 3** — Risk classifier + lethal-trifecta tracker
 - [x] **Phase 4** — Policy engine + default pack
-- [ ] **Phase 5** — Approval channels
+- [x] **Phase 5** — Approval channels
+- [ ] **Phase 6** — Killer demo + Streamable HTTP transport
 - [ ] **Phase 4** — Policy engine + default pack
 - [ ] **Phase 5** — Approval channels
 - [ ] **Phase 6** — Killer demo + Streamable HTTP transport

@@ -168,7 +168,6 @@ export function startStdioProxy(options: StdioProxyOptions): StdioProxyHandle {
         clientStderr,
         `airlock: interceptor error (client->server): ${(err as Error).message}`,
       );
-      // Fail closed: drop the message rather than forwarding it on error.
       return;
     }
     if (decision.respondToClient) {
@@ -176,6 +175,34 @@ export function startStdioProxy(options: StdioProxyOptions): StdioProxyHandle {
     }
     if (decision.forward) {
       await writeToServer(decision.forward);
+    }
+    // If the interceptor returned a `pending` promise, hand its resolution
+    // off to a fire-and-forget handler so the upstream chain advances and
+    // other messages keep flowing. The held call's resolution will write
+    // to the appropriate stream when settled.
+    if (decision.pending) {
+      decision.pending
+        .then(async (resolution) => {
+          try {
+            if (resolution.respondToClient) {
+              await writeToClient(resolution.respondToClient);
+            }
+            if (resolution.forward) {
+              await writeToServer(resolution.forward);
+            }
+          } catch (err) {
+            writeStderr(
+              clientStderr,
+              `airlock: pending resolution write error: ${(err as Error).message}`,
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          writeStderr(
+            clientStderr,
+            `airlock: pending interceptor rejected: ${(err as Error).message}`,
+          );
+        });
     }
   };
 
