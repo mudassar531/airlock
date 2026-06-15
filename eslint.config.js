@@ -32,6 +32,7 @@ export default [
         global: "readonly",
         __dirname: "readonly",
         __filename: "readonly",
+        NodeJS: "readonly",
       },
     },
     plugins: {

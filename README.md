@@ -43,7 +43,7 @@ Airlock spawns your downstream MCP server as a subprocess and relays JSON-RPC tr
 This is being built in seven phases. See [`BUILD_LOG.md`](BUILD_LOG.md) for which phase is live.
 
 - [x] **Phase 0** — Scaffold, CI, repo hygiene
-- [ ] **Phase 1** — MCP stdio proxy (pass-through)
+- [x] **Phase 1** — MCP stdio proxy (pass-through)
 - [ ] **Phase 2** — Tamper-evident audit log
 - [ ] **Phase 3** — Risk classifier + lethal-trifecta tracker
 - [ ] **Phase 4** — Policy engine + default pack
