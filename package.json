@@ -32,6 +32,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "demo:unsafe": "npm run build && node dist/demo/attack-scenario.js unsafe",
+    "demo:safe": "npm run build && node dist/demo/attack-scenario.js safe",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

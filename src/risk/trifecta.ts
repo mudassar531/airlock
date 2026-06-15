@@ -40,7 +40,7 @@ export interface TrifectaSnapshot extends TrifectaState {
   reasons: string[];
 }
 
-const PRIVATE_READ_CAPABILITIES: Capability[] = ["filesystem", "secret"];
+const PRIVATE_READ_CAPABILITIES: Capability[] = ["filesystem", "secret", "message"];
 
 /** Whether `c` represents an outbound action that would exfiltrate. */
 export function isOutboundCall(
@@ -55,14 +55,21 @@ export function isOutboundCall(
   return false;
 }
 
-/** Whether the call represents a read of *private/local* data. */
+/** Whether the call represents a read of *private/local* data.
+ *
+ * Note: a single read can be BOTH private AND ingest untrusted content
+ * (a user's personal email/notes is private, but its body is untrusted
+ * because it can carry an injected instruction). The two flags are
+ * independent — we don't suppress `readPrivate` when `untrustedRead`
+ * is also true.
+ */
 export function isPrivateRead(
   capability: Capability,
   operation: Operation,
-  untrustedRead: boolean | undefined,
+  _untrustedRead: boolean | undefined,
 ): boolean {
+  void _untrustedRead;
   if (operation !== "read") return false;
-  if (untrustedRead) return false; // external content is the *other* leg
   return PRIVATE_READ_CAPABILITIES.includes(capability);
 }
 

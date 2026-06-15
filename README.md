@@ -48,10 +48,7 @@ This is being built in seven phases. See [`BUILD_LOG.md`](BUILD_LOG.md) for whic
 - [x] **Phase 3** — Risk classifier + lethal-trifecta tracker
 - [x] **Phase 4** — Policy engine + default pack
 - [x] **Phase 5** — Approval channels
-- [ ] **Phase 6** — Killer demo + Streamable HTTP transport
-- [ ] **Phase 4** — Policy engine + default pack
-- [ ] **Phase 5** — Approval channels
-- [ ] **Phase 6** — Killer demo + Streamable HTTP transport
+- [x] **Phase 6** — Killer demo + Streamable HTTP transport
 - [ ] **Phase 7** — Packaging, docs, v0.1.0 release
 
 ## Quickstart (coming with Phase 7)
