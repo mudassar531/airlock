@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# This workflow prepares a release archive when a v* tag is pushed. It does NOT
+# auto-publish to npm — `npm publish` requires NPM_TOKEN and a human deliberately
+# pushing a tag. The maintainer should:
+#
+#   1. bump version in package.json + CHANGELOG.md, commit, push to main
+#   2. git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+#   3. wait for this workflow to attach the dist/ tarball to the GitHub Release
+#   4. run `npm publish` locally with their npm credentials (or trigger a
+#      separate workflow that requires manual approval and NPM_TOKEN)
+#
+# This split keeps the publish credential out of any automated path.
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify full gate
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Pack tarball (npm pack, do NOT publish)
+        id: pack
+        run: |
+          TARBALL=$(npm pack --silent | tail -n 1)
+          echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
+          ls -la "${TARBALL}"
+
+      - name: Create GitHub Release with tarball + dist
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.pack.outputs.tarball }}
+
+      - name: Reminder
+        run: |
+          echo "::notice::Release built. To publish to npm: run 'npm publish ${{ steps.pack.outputs.tarball }}' locally with your npm credentials."

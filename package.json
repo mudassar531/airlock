@@ -18,11 +18,21 @@
     "dist",
     "policy.example.yaml",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mudassar531/airlock.git"
+  },
+  "homepage": "https://github.com/mudassar531/airlock#readme",
+  "bugs": {
+    "url": "https://github.com/mudassar531/airlock/issues"
+  },
+  "author": "Mudassar Awan <mudassar531@users.noreply.github.com>",
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
