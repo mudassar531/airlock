@@ -1,0 +1,22 @@
+version: 1
+defaults:
+  on_unmatched: ask        # allow | deny | ask | log  — fail safe, not open
+rules:
+  - name: never-spend-money
+    match: { capability: payment }
+    action: deny
+  - name: hold-the-lethal-trifecta
+    match: { trifecta: true }
+    action: ask
+  - name: confirm-destructive-fs
+    match: { capability: filesystem, operation: delete }
+    action: ask
+  - name: confirm-shell-exec
+    match: { capability: shell }
+    action: ask
+  - name: confirm-outbound-send
+    match: { capability: message, operation: send }
+    action: ask
+  - name: allow-plain-reads
+    match: { operation: read }
+    action: allow

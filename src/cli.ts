@@ -5,6 +5,11 @@ import { AuditLog, verifyChain } from "./audit/log.js";
 import { createAuditingInterceptor } from "./audit/interceptor.js";
 import { generateKeypair } from "./audit/sign.js";
 import { airlockPaths, ensureAirlockHome } from "./config.js";
+import { loadPolicy, InvalidPolicyError } from "./policy/load.js";
+import { evaluate } from "./policy/evaluate.js";
+import { classify } from "./risk/classify.js";
+import { TrifectaTracker } from "./risk/trifecta.js";
+import { scoreRisk } from "./risk/score.js";
 
 /**
  * Build the root commander program. Exposed as a function so tests can
@@ -22,30 +27,48 @@ export function buildProgram(): Command {
   // `airlock wrap -- <command...>` spawns the downstream MCP server and relays
   // newline-delimited JSON-RPC between the upstream client (on this process's
   // stdio) and that server. The interceptor records every tools/call to the
-  // tamper-evident audit log at ~/.airlock/audit.log.
+  // tamper-evident audit log and consults the active policy.
   program
     .command("wrap")
     .description(
-      "Wrap a downstream MCP server: airlock wrap -- <command> [args...]",
+      "Wrap a downstream MCP server: airlock wrap [--policy <file>] -- <command> [args...]",
     )
+    .option("--policy <file>", "Path to an explicit airlock policy YAML file")
     .argument("<command...>", "Downstream MCP server command and arguments")
     .allowUnknownOption(true)
-    .action(async (commandTokens: string[]) => {
+    .action(async (commandTokens: string[], opts: { policy?: string }) => {
       if (!commandTokens || commandTokens.length === 0) {
         process.stderr.write(
           `${PRODUCT_NAME} wrap: missing command. Use: airlock wrap -- <command> [args...]\n`,
         );
         process.exit(2);
       }
+      let loaded;
+      try {
+        loaded = loadPolicy({ explicit: opts.policy });
+      } catch (err) {
+        // Fail closed: refuse to run on an invalid policy.
+        if (err instanceof InvalidPolicyError) {
+          process.stderr.write(`${PRODUCT_NAME}: ${err.message}\n`);
+        } else {
+          process.stderr.write(
+            `${PRODUCT_NAME}: failed to load policy: ${(err as Error).message}\n`,
+          );
+        }
+        process.exit(3);
+      }
       const [command, ...args] = commandTokens;
       const auditLog = new AuditLog();
       const handle = startStdioProxy({
         command: command!,
         args,
-        interceptor: createAuditingInterceptor({ log: auditLog }),
+        interceptor: createAuditingInterceptor({
+          log: auditLog,
+          policy: loaded.policy,
+        }),
         onReady: ({ sessionId, childPid }) => {
           process.stderr.write(
-            `${PRODUCT_NAME}: wrapping pid=${childPid ?? "?"} session=${sessionId}\n`,
+            `${PRODUCT_NAME}: wrapping pid=${childPid ?? "?"} session=${sessionId} policy=${loaded.source}${loaded.path ? `:${loaded.path}` : ""}\n`,
           );
         },
       });
@@ -94,8 +117,9 @@ export function buildProgram(): Command {
         const risk = e.risk ? ` risk=${e.risk}` : "";
         const cap = e.capability ? ` ${e.capability}` : "";
         const op = e.operation ? `/${e.operation}` : "";
+        const rule = e.ruleName ? ` rule=${e.ruleName}` : "";
         process.stdout.write(
-          `[${e.ts}] seq=${e.seq} ${e.verdict.toUpperCase().padEnd(5)} ${e.tool}${cap}${op}${risk} ${e.latencyMs}ms — ${e.reason}\n`,
+          `[${e.ts}] seq=${e.seq} ${e.verdict.toUpperCase().padEnd(5)} ${e.tool}${cap}${op}${risk}${rule} ${e.latencyMs}ms — ${e.reason}\n`,
         );
       }
     });
@@ -116,6 +140,72 @@ export function buildProgram(): Command {
         `${PRODUCT_NAME}: audit chain BROKEN at seq=${result.firstBrokenSeq} — ${result.reason}\n`,
       );
       process.exit(1);
+    });
+
+  const policyCmd = program
+    .command("policy")
+    .description("Inspect the active policy");
+
+  policyCmd
+    .command("check")
+    .description(
+      "Show which rule would fire for a sample call. Useful for tuning policies.",
+    )
+    .requiredOption("--tool <name>", "Tool name (e.g. http_post)")
+    .option(
+      "--args <json>",
+      "Tool arguments as a JSON string (default: {})",
+      "{}",
+    )
+    .option("--policy <file>", "Path to an explicit airlock policy YAML file")
+    .option(
+      "--trifecta",
+      "Treat the session as having completed the lethal trifecta",
+      false,
+    )
+    .action((opts: { tool: string; args: string; policy?: string; trifecta?: boolean }) => {
+      let parsedArgs: unknown;
+      try {
+        parsedArgs = JSON.parse(opts.args);
+      } catch (err) {
+        process.stderr.write(
+          `${PRODUCT_NAME} policy check: --args must be valid JSON: ${(err as Error).message}\n`,
+        );
+        process.exit(2);
+      }
+      let loaded;
+      try {
+        loaded = loadPolicy({ explicit: opts.policy });
+      } catch (err) {
+        process.stderr.write(`${PRODUCT_NAME}: ${(err as Error).message}\n`);
+        process.exit(3);
+      }
+      const classification = classify({ tool: opts.tool, name: opts.tool, arguments: parsedArgs } as never);
+      const tracker = new TrifectaTracker();
+      if (opts.trifecta) {
+        // Pre-seed a session with the trifecta legs filled, then re-inspect.
+        tracker.observe("check", classify({ name: "read_file", arguments: { path: "/x" } }));
+        tracker.observe("check", classify({ name: "fetch", arguments: { url: "https://example.com" } }));
+      }
+      const snapshot = tracker.inspect("check", classification);
+      const assessment = scoreRisk(classification, snapshot);
+      const verdict = evaluate(loaded.policy, {
+        toolName: opts.tool,
+        classification,
+        trifecta: snapshot,
+        assessment,
+      });
+      process.stdout.write(
+        `${PRODUCT_NAME} policy check\n` +
+          `  policy source: ${loaded.source}${loaded.path ? ` (${loaded.path})` : ""}\n` +
+          `  tool:          ${opts.tool}\n` +
+          `  classification: capability=${classification.capability} operation=${classification.operation}${classification.untrustedRead ? " untrustedRead=true" : ""}\n` +
+          `  trifecta:      ${snapshot.isLethal}\n` +
+          `  risk:          ${assessment.risk}\n` +
+          `  risk reasons:  ${assessment.reasons.join(" | ")}\n` +
+          `  verdict:       ${verdict.action} (rule '${verdict.ruleName}')\n` +
+          `  reason:        ${verdict.reason}\n`,
+      );
     });
 
   return program;
