@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.tsup-cache/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+.vscode/
+.idea/
+*.swp
+.airlock-test/
